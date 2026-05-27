@@ -23,13 +23,15 @@ export default class MermaidZoomPlugin extends Plugin {
 	private readonly defaultMaxScale = 5;
 	private readonly defaultScale = 1;
 	private mutationObserver?: MutationObserver;
+	private resizeObserver?: ResizeObserver;
 	private processedElements = new WeakSet<SVGSVGElement>();
 
 	onload() {
 		console.debug('Loading Mermaid Zoom plugin');
 
-		// Set up MutationObserver to watch for new mermaid diagrams
+		// Set up observers
 		this.setupMutationObserver();
+		this.setupResizeObserver();
 
 		// Initial processing of existing content
 		this.app.workspace.onLayoutReady(() => {
@@ -51,6 +53,20 @@ export default class MermaidZoomPlugin extends Plugin {
 			// Delay to allow mermaid to render
 			setTimeout(() => this.processAllMermaidDiagrams(), 200);
 		}));
+	}
+
+	private setupResizeObserver() {
+		this.resizeObserver = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				const container = entry.target as HTMLElement;
+				const contentWrapper = container.querySelector('.mermaid-zoom-content') as HTMLElement;
+				if (!contentWrapper) continue;
+				const state = this.zoomStates.get(contentWrapper);
+				if (state) {
+					this.fitToContainer(container, contentWrapper, state.svg, state);
+				}
+			}
+		});
 	}
 
 	private setupMutationObserver() {
@@ -198,6 +214,9 @@ export default class MermaidZoomPlugin extends Plugin {
 
 		// Fit SVG to container initially
 		this.fitToContainer(container, contentWrapper, svg, state);
+
+		// Re-fit on container resize
+		this.resizeObserver?.observe(container);
 	}
 
 	private fitToContainer(container: HTMLElement, contentWrapper: HTMLElement, svg: SVGSVGElement, state: ZoomState) {
@@ -825,9 +844,12 @@ export default class MermaidZoomPlugin extends Plugin {
 	onunload() {
 		console.debug('Unloading Mermaid Zoom plugin');
 
-		// Disconnect mutation observer
+		// Disconnect observers
 		if (this.mutationObserver) {
 			this.mutationObserver.disconnect();
+		}
+		if (this.resizeObserver) {
+			this.resizeObserver.disconnect();
 		}
 
 		this.zoomStates.clear();
