@@ -227,28 +227,33 @@ export default class MermaidZoomPlugin extends Plugin {
 		if (container.clientWidth <= 0 || container.clientHeight <= 0) return;
 		if (state.svgOriginalWidth <= 0 || state.svgOriginalHeight <= 0) return;
 
-		// 计算可用空间（扣除内边距）
-		const containerPadding = 16; // 1em padding
-		const bottomPadding = 40; // extra padding for controls
-		const availableWidth = container.clientWidth - containerPadding * 2;
-		const availableHeight = container.clientHeight - containerPadding - bottomPadding;
+		// 从实际渲染样式中获取内边距，避免硬编码 1em=16px 的假设偏差
+		const computedStyle = getComputedStyle(container);
+		const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
+		const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
+		const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+		const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
 
-		// Use saved original SVG dimensions
+		// 计算可用空间（基于实际内边距）
+		const availableWidth = container.clientWidth - paddingLeft - paddingRight;
+		const availableHeight = container.clientHeight - paddingTop - paddingBottom;
+
+		// 使用保存的原始 SVG 尺寸
 		const svgWidth = state.svgOriginalWidth;
 		const svgHeight = state.svgOriginalHeight;
 
-		// Calculate scale to fit
+		// 计算适配缩放比例
 		const scaleX = availableWidth / svgWidth;
 		const scaleY = availableHeight / svgHeight;
-		const fitScale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond 100%
+		const fitScale = Math.min(scaleX, scaleY, 1); // 不超过 100%
 
-		// Center the SVG within the available area
+		// 基于容器全宽居中（与全屏模态框一致），减去左内边距得到 translateX
 		const scaledWidth = svgWidth * fitScale;
 		const scaledHeight = svgHeight * fitScale;
-		const centerX = (availableWidth - scaledWidth) / 2;
-		const centerY = (availableHeight - scaledHeight) / 2;
+		const centerX = (container.clientWidth - scaledWidth) / 2 - paddingLeft;
+		const centerY = (container.clientHeight - scaledHeight) / 2 - paddingTop;
 
-		// Apply the scale and center
+		// 应用缩放和居中
 		state.scale = fitScale;
 		state.translateX = centerX;
 		state.translateY = Math.max(0, centerY);
