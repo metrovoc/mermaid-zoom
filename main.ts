@@ -59,6 +59,15 @@ export default class MermaidZoomPlugin extends Plugin {
 		this.resizeObserver = new ResizeObserver((entries) => {
 			for (const entry of entries) {
 				const container = entry.target as HTMLElement;
+				// 容器已从 DOM 中移除时，停止观察并清理状态
+				if (!document.contains(container)) {
+					this.resizeObserver?.unobserve(container);
+					const contentWrapper = container.querySelector('.mermaid-zoom-content') as HTMLElement;
+					if (contentWrapper) {
+						this.zoomStates.delete(contentWrapper);
+					}
+					continue;
+				}
 				const contentWrapper = container.querySelector('.mermaid-zoom-content') as HTMLElement;
 				if (!contentWrapper) continue;
 				const state = this.zoomStates.get(contentWrapper);
@@ -200,17 +209,11 @@ export default class MermaidZoomPlugin extends Plugin {
 		};
 		this.zoomStates.set(contentWrapper, state);
 
-		// Create controls (includes resize handle)
-		this.createControls(container, contentWrapper, state);
-
-		// Add mouse wheel zoom
-		this.addWheelZoom(container, contentWrapper, state);
-
-		// Add drag to pan
-		this.addDragPan(container, contentWrapper, state);
-
-		// Add touch gesture support
-		this.addTouchGestures(container, contentWrapper, state);
+		// 注册控件和交互，插件卸载时自动清理
+		this.register(this.createControls(container, contentWrapper, state));
+		this.register(this.addWheelZoom(container, contentWrapper, state));
+		this.register(this.addDragPan(container, contentWrapper, state));
+		this.register(this.addTouchGestures(container, contentWrapper, state));
 
 		// Fit SVG to container initially
 		this.fitToContainer(container, contentWrapper, svg, state);
@@ -220,7 +223,11 @@ export default class MermaidZoomPlugin extends Plugin {
 	}
 
 	private fitToContainer(container: HTMLElement, contentWrapper: HTMLElement, svg: SVGSVGElement, state: ZoomState) {
-		// Get available space (account for padding)
+		// 零值保护：容器或 SVG 尺寸为零时跳过，避免产生无效缩放
+		if (container.clientWidth <= 0 || container.clientHeight <= 0) return;
+		if (state.svgOriginalWidth <= 0 || state.svgOriginalHeight <= 0) return;
+
+		// 计算可用空间（扣除内边距）
 		const containerPadding = 16; // 1em padding
 		const bottomPadding = 40; // extra padding for controls
 		const availableWidth = container.clientWidth - containerPadding * 2;
@@ -403,13 +410,23 @@ export default class MermaidZoomPlugin extends Plugin {
 		modal.appendChild(header);
 		modal.appendChild(content);
 
-		// Close modal function
+		// 注册模态框交互，收集清理函数以便关闭时移除
+		const modalCleanupFns: (() => void)[] = [];
+		modalCleanupFns.push(this.addWheelZoom(modalZoomContainer, modalContentWrapper, modalState));
+		modalCleanupFns.push(this.addDragPan(modalZoomContainer, modalContentWrapper, modalState));
+		modalCleanupFns.push(this.addTouchGestures(modalZoomContainer, modalContentWrapper, modalState));
+
+		// 关闭模态框
 		const closeModal = () => {
+			// 清理模态框的所有事件监听器
+			for (const cleanup of modalCleanupFns) {
+				cleanup();
+			}
 			modal.remove();
 			document.removeEventListener('keydown', handleKeydown);
 		};
 
-		// Handle ESC key
+		// 处理 ESC 键
 		const handleKeydown = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') {
 				closeModal();
@@ -417,25 +434,24 @@ export default class MermaidZoomPlugin extends Plugin {
 		};
 		document.addEventListener('keydown', handleKeydown);
 
-		// Close button click
+		// 关闭按钮点击
 		closeBtn.addEventListener('click', closeModal);
 
-		// Add modal to document
+		// 将模态框添加到文档
 		document.body.appendChild(modal);
 
-		// Add zoom/pan interactions to modal
-		this.addWheelZoom(modalZoomContainer, modalContentWrapper, modalState);
-		this.addDragPan(modalZoomContainer, modalContentWrapper, modalState);
-		this.addTouchGestures(modalZoomContainer, modalContentWrapper, modalState);
-
-		// Fit to container after modal is visible
+		// 模态框可见后适配容器
 		requestAnimationFrame(() => {
 			this.fitToContainerModal(modalZoomContainer, modalContentWrapper, modalState);
 		});
 	}
 
 	private fitToContainerModal(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
-		// Get available space
+		// 零值保护：模态框容器或 SVG 尺寸为零时跳过
+		if (container.clientWidth <= 0 || container.clientHeight <= 0) return;
+		if (state.svgOriginalWidth <= 0 || state.svgOriginalHeight <= 0) return;
+
+		// 计算可用空间
 		const padding = 40;
 		const availableWidth = container.clientWidth - padding * 2;
 		const availableHeight = container.clientHeight - padding * 2;
@@ -462,7 +478,7 @@ export default class MermaidZoomPlugin extends Plugin {
 		this.updateTransform(contentWrapper, state);
 	}
 
-	private createControls(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
+	private createControls(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
 		const controls = container.createDiv('mermaid-zoom-controls');
 		controls.style.cssText = `
 			position: absolute;
@@ -565,8 +581,8 @@ export default class MermaidZoomPlugin extends Plugin {
 			this.openFullscreenModal(state);
 		});
 
-		// Add resize handles to container (4 corners + 4 edges)
-		this.addResizeHandles(container, contentWrapper, state);
+		// 添加调整大小手柄，并返回清理函数
+		return this.addResizeHandles(container, contentWrapper, state);
 	}
 
 	private styleButton(btn: HTMLButtonElement) {
@@ -586,8 +602,8 @@ export default class MermaidZoomPlugin extends Plugin {
 		`;
 	}
 
-	private addResizeHandles(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
-		// Map cursor types to CSS class names
+	private addResizeHandles(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
+		// 光标类型到 CSS 类名的映射
 		const cursorClassMap: Record<string, string> = {
 			'nwse-resize': 'mermaid-zoom-resizing-nwse',
 			'nesw-resize': 'mermaid-zoom-resizing-nesw',
@@ -595,7 +611,7 @@ export default class MermaidZoomPlugin extends Plugin {
 			'ew-resize': 'mermaid-zoom-resizing-ew'
 		};
 
-		// Define resize handles: 4 corners + 4 edges
+		// 定义调整大小手柄：4个角 + 4条边
 		const handles = [
 			{ position: 'top-left', cursor: 'nwse-resize', style: 'top: 0; left: 0; width: 12px; height: 12px;' },
 			{ position: 'top-right', cursor: 'nesw-resize', style: 'top: 0; right: 0; width: 12px; height: 12px;' },
@@ -607,7 +623,10 @@ export default class MermaidZoomPlugin extends Plugin {
 			{ position: 'right', cursor: 'ew-resize', style: 'top: 12px; bottom: 12px; right: 0; width: 6px;' },
 		];
 
-		// Get initial margin values
+		// 收集所有 document 级监听器引用，用于统一清理
+		const documentListeners: Array<{ type: string; fn: EventListener }> = [];
+
+		// 获取初始边距值
 		let currentMarginLeft = 0;
 		let currentMarginTop = 0;
 
@@ -654,11 +673,11 @@ export default class MermaidZoomPlugin extends Plugin {
 				let newMarginLeft = startMarginLeft;
 				let newMarginTop = startMarginTop;
 
-				// Handle horizontal resize
+				// 水平方向调整
 				if (position.includes('right')) {
 					newWidth = Math.max(150, startWidth + deltaX);
 				} else if (position.includes('left')) {
-					// Expand to the left using negative margin
+					// 使用负边距向左扩展
 					const widthDelta = -deltaX;
 					newWidth = Math.max(150, startWidth + widthDelta);
 					if (newWidth > 150) {
@@ -666,11 +685,11 @@ export default class MermaidZoomPlugin extends Plugin {
 					}
 				}
 
-				// Handle vertical resize
+				// 垂直方向调整
 				if (position.includes('bottom')) {
 					newHeight = Math.max(100, startHeight + deltaY);
 				} else if (position.includes('top')) {
-					// Expand upward using negative margin
+					// 使用负边距向上扩展
 					const heightDelta = -deltaY;
 					newHeight = Math.max(100, startHeight + heightDelta);
 					if (newHeight > 100) {
@@ -696,11 +715,22 @@ export default class MermaidZoomPlugin extends Plugin {
 			handle.addEventListener('mousedown', onMouseDown);
 			document.addEventListener('mousemove', onMouseMove);
 			document.addEventListener('mouseup', onMouseUp);
+			documentListeners.push(
+				{ type: 'mousemove', fn: onMouseMove },
+				{ type: 'mouseup', fn: onMouseUp }
+			);
 		});
+
+		// 返回清理函数，批量移除所有 document 级监听器
+		return () => {
+			for (const { type, fn } of documentListeners) {
+				document.removeEventListener(type, fn);
+			}
+		};
 	}
 
-	private addWheelZoom(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
-		container.addEventListener('wheel', (e) => {
+	private addWheelZoom(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
+		const wheelHandler = (e: WheelEvent) => {
 			e.preventDefault();
 
 			const rect = container.getBoundingClientRect();
@@ -713,7 +743,7 @@ export default class MermaidZoomPlugin extends Plugin {
 			newScale = Math.max(state.minScale, Math.min(state.maxScale, newScale));
 
 			if (newScale !== oldScale) {
-				// Adjust translation to zoom toward mouse position
+				// 根据鼠标位置调整缩放平移
 				const scaleRatio = newScale / oldScale;
 				state.translateX = mouseX - (mouseX - state.translateX) * scaleRatio;
 				state.translateY = mouseY - (mouseY - state.translateY) * scaleRatio;
@@ -721,15 +751,18 @@ export default class MermaidZoomPlugin extends Plugin {
 
 				this.updateTransform(contentWrapper, state);
 			}
-		}, { passive: false });
+		};
+		container.addEventListener('wheel', wheelHandler, { passive: false });
+
+		return () => container.removeEventListener('wheel', wheelHandler);
 	}
 
-	private addDragPan(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
-		// Set initial cursor state
+	private addDragPan(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
+		// 设置初始光标状态
 		contentWrapper.classList.add('mermaid-zoom-content');
 
 		container.addEventListener('mousedown', (e) => {
-			if (e.button === 0) { // Left mouse button
+			if (e.button === 0) { // 左键按下
 				state.isDragging = true;
 				state.startX = e.clientX - state.translateX;
 				state.startY = e.clientY - state.translateY;
@@ -737,30 +770,39 @@ export default class MermaidZoomPlugin extends Plugin {
 			}
 		});
 
-		document.addEventListener('mousemove', (e) => {
+		const onMouseMove = (e: MouseEvent) => {
 			if (state.isDragging) {
 				e.preventDefault();
 				state.translateX = e.clientX - state.startX;
 				state.translateY = e.clientY - state.startY;
 				this.updateTransform(contentWrapper, state);
 			}
-		});
+		};
 
-		document.addEventListener('mouseup', () => {
+		const onMouseUp = () => {
 			if (state.isDragging) {
 				state.isDragging = false;
 				contentWrapper.removeClass('dragging');
 			}
-		});
+		};
+
+		document.addEventListener('mousemove', onMouseMove);
+		document.addEventListener('mouseup', onMouseUp);
+
+		// 返回清理函数，移除 document 级监听器
+		return () => {
+			document.removeEventListener('mousemove', onMouseMove);
+			document.removeEventListener('mouseup', onMouseUp);
+		};
 	}
 
-	private addTouchGestures(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
+	private addTouchGestures(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
 		let initialDistance = 0;
 		let initialScale = 1;
 
-		container.addEventListener('touchstart', (e) => {
+		const onTouchStart = (e: TouchEvent) => {
 			if (e.touches.length === 2) {
-				// Pinch to zoom
+				// 双指缩放
 				const touch1 = e.touches[0];
 				const touch2 = e.touches[1];
 				initialDistance = Math.hypot(
@@ -769,18 +811,18 @@ export default class MermaidZoomPlugin extends Plugin {
 				);
 				initialScale = state.scale;
 			} else if (e.touches.length === 1) {
-				// Single touch drag
+				// 单指拖拽
 				state.isDragging = true;
 				state.startX = e.touches[0].clientX - state.translateX;
 				state.startY = e.touches[0].clientY - state.translateY;
 			}
-		});
+		};
 
-		container.addEventListener('touchmove', (e) => {
+		const onTouchMove = (e: TouchEvent) => {
 			e.preventDefault();
 
 			if (e.touches.length === 2) {
-				// Pinch to zoom
+				// 双指缩放
 				const touch1 = e.touches[0];
 				const touch2 = e.touches[1];
 				const currentDistance = Math.hypot(
@@ -795,16 +837,26 @@ export default class MermaidZoomPlugin extends Plugin {
 				state.scale = newScale;
 				this.updateTransform(contentWrapper, state);
 			} else if (e.touches.length === 1 && state.isDragging) {
-				// Single touch drag
+				// 单指拖拽
 				state.translateX = e.touches[0].clientX - state.startX;
 				state.translateY = e.touches[0].clientY - state.startY;
 				this.updateTransform(contentWrapper, state);
 			}
-		}, { passive: false });
+		};
 
-		container.addEventListener('touchend', () => {
+		const onTouchEnd = () => {
 			state.isDragging = false;
-		});
+		};
+
+		container.addEventListener('touchstart', onTouchStart);
+		container.addEventListener('touchmove', onTouchMove, { passive: false });
+		container.addEventListener('touchend', onTouchEnd);
+
+		return () => {
+			container.removeEventListener('touchstart', onTouchStart);
+			container.removeEventListener('touchmove', onTouchMove);
+			container.removeEventListener('touchend', onTouchEnd);
+		};
 	}
 
 	private zoom(contentWrapper: HTMLElement, state: ZoomState, factor: number) {

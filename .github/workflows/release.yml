@@ -7,6 +7,9 @@ on:
       - "README.md"
       - "README.zh-CN.md"
       - "LICENSE"
+      - "package.json"
+      - "manifest.json"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -35,6 +38,11 @@ jobs:
         id: version
         run: |
           VERSION="${{ steps.current.outputs.version }}"
+          # 校验版本号格式，防止命令注入
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "无效的版本号格式: $VERSION"
+            exit 1
+          fi
           if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
             IFS='.' read -r major minor patch <<< "$VERSION"
             VERSION="$major.$minor.$((patch + 1))"
@@ -44,7 +52,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add manifest.json package.json
-            git commit -m "chore: bump version to ${VERSION}"
+            git commit -m "chore: bump version to ${VERSION} [skip ci]"
             git push
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
