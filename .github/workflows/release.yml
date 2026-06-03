@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
+      - '*'
   workflow_dispatch:
     inputs:
       version:
@@ -39,7 +39,7 @@ jobs:
           if [[ -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
           else
-            VERSION="${GITHUB_REF#refs/tags/v}"
+            VERSION="${GITHUB_REF#refs/tags/}"
             if [[ "$VERSION" == "$GITHUB_REF" ]]; then
               VERSION=$(jq -r .version manifest.json)
             fi
@@ -55,7 +55,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.version }}"
           if ! git rev-parse "$tag" >/dev/null 2>&1; then
             git tag "$tag"
             git push origin "$tag"
