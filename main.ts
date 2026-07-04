@@ -1,4 +1,4 @@
-import { Plugin } from 'obsidian';
+import { Plugin, ToggleComponent } from 'obsidian';
 
 interface ZoomState {
 	scale: number;
@@ -15,6 +15,10 @@ interface ZoomState {
 	// Original SVG dimensions (saved once)
 	svgOriginalWidth: number;
 	svgOriginalHeight: number;
+	// Whether wheel-zoom is enabled for this diagram (inline view only;
+	// the modal always sets this to true). Default false so the wheel
+	// scrolls the page unless the user opts in via the toggle button.
+	wheelZoomEnabled: boolean;
 }
 
 export default class MermaidZoomPlugin extends Plugin {
@@ -205,7 +209,8 @@ export default class MermaidZoomPlugin extends Plugin {
 			svg: svg,
 			container: container,
 			svgOriginalWidth: svgOriginalWidth,
-			svgOriginalHeight: svgOriginalHeight
+			svgOriginalHeight: svgOriginalHeight,
+			wheelZoomEnabled: false
 		};
 		this.zoomStates.set(contentWrapper, state);
 
@@ -373,7 +378,8 @@ export default class MermaidZoomPlugin extends Plugin {
 			svg: svgClone,
 			container: modalZoomContainer,
 			svgOriginalWidth: state.svgOriginalWidth,
-			svgOriginalHeight: state.svgOriginalHeight
+			svgOriginalHeight: state.svgOriginalHeight,
+			wheelZoomEnabled: true
 		};
 
 		// Add zoom buttons
@@ -497,6 +503,40 @@ export default class MermaidZoomPlugin extends Plugin {
 			border-radius: 5px;
 			box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 		`;
+
+		// Wheel-zoom switch (off by default). Toggling it flips
+		// state.wheelZoomEnabled, which the wheel handler in addWheelZoom is
+		// gated on — so when off the wheel scrolls the page normally.
+		const wheelZoomToggle = controls.createDiv('mermaid-wheel-zoom-toggle');
+		wheelZoomToggle.style.cssText = `
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			padding: 0 8px 0 4px;
+		`;
+
+		const wheelZoomLabel = wheelZoomToggle.createEl('span', {
+			text: 'Wheel zoom',
+			cls: 'mermaid-wheel-zoom-label'
+		});
+		wheelZoomLabel.style.cssText = `
+			font-size: 12px;
+			font-family: var(--font-ui-medium);
+			color: var(--text-muted);
+			white-space: nowrap;
+		`;
+
+		new ToggleComponent(wheelZoomToggle)
+			.setValue(state.wheelZoomEnabled)
+			.onChange((value) => {
+				state.wheelZoomEnabled = value;
+			});
+
+		// Stop pointer/click events on the switch from bubbling into the
+		// container, where they would otherwise start a drag-pan.
+		const stopSwitchEvent = (e: Event) => e.stopPropagation();
+		wheelZoomToggle.addEventListener('mousedown', stopSwitchEvent);
+		wheelZoomToggle.addEventListener('click', stopSwitchEvent);
 
 		// Zoom in button
 		const zoomInBtn = controls.createEl('button', {
@@ -736,6 +776,10 @@ export default class MermaidZoomPlugin extends Plugin {
 
 	private addWheelZoom(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
 		const wheelHandler = (e: WheelEvent) => {
+			// Wheel zoom is opt-in (inline view defaults to off). Returning here
+			// before preventDefault() lets the page scroll normally when disabled.
+			if (!state.wheelZoomEnabled) return;
+
 			e.preventDefault();
 
 			const rect = container.getBoundingClientRect();
