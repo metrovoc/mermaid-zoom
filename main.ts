@@ -1,4 +1,4 @@
-import { Plugin, ToggleComponent } from 'obsidian';
+import { Plugin, ToggleComponent, setIcon, setTooltip } from 'obsidian';
 
 interface ZoomState {
 	scale: number;
@@ -608,32 +608,110 @@ export default class MermaidZoomPlugin extends Plugin {
 
 	private createControls(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
 		const controls = container.createDiv('mermaid-zoom-controls');
-		controls.style.cssText = `
-			position: absolute;
-			bottom: 10px;
-			right: 10px;
-			display: flex;
-			gap: 5px;
-			z-index: 100;
-			background: var(--background-secondary);
-			padding: 5px;
-			border-radius: 5px;
-			box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+		controls.setAttr('aria-label', 'Mermaid zoom controls');
+
+		const triggerBtn = this.createIconButton(
+			controls,
+			'settings-2',
+			'Show zoom controls',
+			'mermaid-zoom-btn mermaid-zoom-controls-trigger'
+		);
+		triggerBtn.setAttr('aria-expanded', 'false');
+
+		const panel = controls.createDiv('mermaid-zoom-controls-panel');
+
+		const collapseControls = () => {
+			controls.removeClass('is-expanded');
+			triggerBtn.setAttr('aria-expanded', 'false');
+		};
+
+		const toggleControls = () => {
+			const expanded = !controls.hasClass('is-expanded');
+			controls.toggleClass('is-expanded', expanded);
+			triggerBtn.setAttr('aria-expanded', expanded ? 'true' : 'false');
+		};
+
+		const stopControlsEvent = (e: Event) => e.stopPropagation();
+		for (const eventName of ['mousedown', 'click', 'touchstart', 'wheel']) {
+			controls.addEventListener(eventName, stopControlsEvent);
+		}
+
+		triggerBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			toggleControls();
+		});
+
+		controls.addEventListener('keydown', (e) => {
+			if (e.key === 'Escape') {
+				collapseControls();
+				triggerBtn.focus();
+			}
+		});
+
+		const onDocumentMouseDown = (e: MouseEvent) => {
+			if (e.target instanceof Node && !controls.contains(e.target)) {
+				collapseControls();
+			}
+		};
+		document.addEventListener('mousedown', onDocumentMouseDown);
+
+		// Zoom out button
+		const zoomOutBtn = this.createIconButton(panel, 'minus', 'Zoom out');
+		zoomOutBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.zoom(contentWrapper, state, 0.8);
+		});
+
+		// Scale indicator
+		const scaleIndicator = panel.createEl('span', {
+			cls: 'mermaid-zoom-scale'
+		});
+		scaleIndicator.style.cssText = `
+			padding: 4px 8px;
+			font-size: 12px;
+			font-family: var(--font-ui-medium);
+			color: var(--text-muted);
+			min-width: 45px;
+			text-align: center;
 		`;
+		scaleIndicator.setAttr('aria-live', 'polite');
+		state.scaleIndicator = scaleIndicator;
+		this.updateTransform(contentWrapper, state);
+
+		// Zoom in button
+		const zoomInBtn = this.createIconButton(panel, 'plus', 'Zoom in');
+		zoomInBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.zoom(contentWrapper, state, 1.2);
+		});
+
+		// Reset button
+		const resetBtn = this.createIconButton(panel, 'rotate-ccw', 'Fit diagram');
+		resetBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.resetZoom(contentWrapper, state);
+		});
+
+		// Fullscreen toggle button
+		const fullscreenBtn = this.createIconButton(panel, 'maximize-2', 'Open fullscreen', 'mermaid-zoom-btn mermaid-fullscreen-btn');
+		fullscreenBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.openFullscreenModal(state);
+		});
 
 		// Wheel-zoom switch (off by default). Toggling it flips
 		// state.wheelZoomEnabled, which the wheel handler in addWheelZoom is
 		// gated on — so when off the wheel scrolls the page normally.
-		const wheelZoomToggle = controls.createDiv('mermaid-wheel-zoom-toggle');
+		const wheelZoomToggle = panel.createDiv('mermaid-wheel-zoom-toggle');
 		wheelZoomToggle.style.cssText = `
 			display: flex;
 			align-items: center;
 			gap: 6px;
-			padding: 0 8px 0 4px;
+			padding: 0 6px 0 2px;
 		`;
 
 		const wheelZoomLabel = wheelZoomToggle.createEl('span', {
-			text: 'Wheel zoom',
+			text: 'Wheel',
 			cls: 'mermaid-wheel-zoom-label'
 		});
 		wheelZoomLabel.style.cssText = `
@@ -655,96 +733,29 @@ export default class MermaidZoomPlugin extends Plugin {
 		wheelZoomToggle.addEventListener('mousedown', stopSwitchEvent);
 		wheelZoomToggle.addEventListener('click', stopSwitchEvent);
 
-		// Zoom in button
-		const zoomInBtn = controls.createEl('button', {
-			text: '+',
-			cls: 'mermaid-zoom-btn'
-		});
-		this.styleButton(zoomInBtn);
-		zoomInBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.zoom(contentWrapper, state, 1.2);
-		});
-
-		// Zoom out button
-		const zoomOutBtn = controls.createEl('button', {
-			text: '-',
-			cls: 'mermaid-zoom-btn'
-		});
-		this.styleButton(zoomOutBtn);
-		zoomOutBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.zoom(contentWrapper, state, 0.8);
-		});
-
-		// Reset button
-		const resetBtn = controls.createEl('button', {
-			text: '⟲',
-			cls: 'mermaid-zoom-btn'
-		});
-		this.styleButton(resetBtn);
-		resetBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.resetZoom(contentWrapper, state);
-		});
-
-		// Scale indicator
-		const scaleIndicator = controls.createEl('span', {
-			cls: 'mermaid-zoom-scale'
-		});
-		scaleIndicator.style.cssText = `
-			padding: 4px 8px;
-			font-size: 12px;
-			font-family: var(--font-ui-medium);
-			color: var(--text-muted);
-			min-width: 45px;
-			text-align: center;
-		`;
-		state.scaleIndicator = scaleIndicator;
-		this.updateTransform(contentWrapper, state);
-
-		// Fullscreen toggle button
-		const fullscreenBtn = controls.createEl('button', {
-			cls: 'mermaid-zoom-btn mermaid-fullscreen-btn'
-		});
-
-		// Create SVG icon
-		const svgNS = 'http://www.w3.org/2000/svg';
-		const svg = document.createElementNS(svgNS, 'svg');
-		svg.setAttribute('width', '24');
-		svg.setAttribute('height', '24');
-		svg.setAttribute('viewBox', '0 0 16 16');
-		svg.setAttribute('fill', 'none');
-		svg.setAttribute('stroke', 'currentColor');
-		svg.setAttribute('stroke-width', '1');
-		svg.setAttribute('stroke-linecap', 'round');
-		svg.setAttribute('stroke-linejoin', 'round');
-
-		const polyline1 = document.createElementNS(svgNS, 'polyline');
-		polyline1.setAttribute('points', '1,10 1,15 6,15');
-		svg.appendChild(polyline1);
-
-		const polyline2 = document.createElementNS(svgNS, 'polyline');
-		polyline2.setAttribute('points', '15,10 15,15 10,15');
-		svg.appendChild(polyline2);
-
-		const polyline3 = document.createElementNS(svgNS, 'polyline');
-		polyline3.setAttribute('points', '1,6 1,1 6,1');
-		svg.appendChild(polyline3);
-
-		const polyline4 = document.createElementNS(svgNS, 'polyline');
-		polyline4.setAttribute('points', '15,6 15,1 10,1');
-		svg.appendChild(polyline4);
-
-		fullscreenBtn.appendChild(svg);
-		this.styleButton(fullscreenBtn);
-		fullscreenBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.openFullscreenModal(state);
-		});
-
 		// 添加调整大小手柄，并返回清理函数
-		return this.addResizeHandles(container, contentWrapper, state);
+		const cleanupResizeHandles = this.addResizeHandles(container, contentWrapper, state);
+		return () => {
+			document.removeEventListener('mousedown', onDocumentMouseDown);
+			for (const eventName of ['mousedown', 'click', 'touchstart', 'wheel']) {
+				controls.removeEventListener(eventName, stopControlsEvent);
+			}
+			cleanupResizeHandles();
+		};
+	}
+
+	private createIconButton(parent: HTMLElement, icon: string, label: string, className = 'mermaid-zoom-btn'): HTMLButtonElement {
+		const btn = parent.createEl('button', {
+			cls: className,
+			attr: {
+				type: 'button',
+				'aria-label': label
+			}
+		});
+		setIcon(btn, icon);
+		setTooltip(btn, label, { placement: 'top', delay: 300 });
+		this.styleButton(btn);
+		return btn;
 	}
 
 	private styleButton(btn: HTMLButtonElement) {

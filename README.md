@@ -9,11 +9,11 @@ An Obsidian plugin that adds zoom and pan functionality to Mermaid diagrams.
 
 ## Features
 
-- **Mouse Wheel Zoom** - Scroll over any Mermaid diagram to zoom in and out
+- **Optional Mouse Wheel Zoom** - Enable wheel zoom per diagram when you want scroll-to-zoom
 - **Drag to Pan** - Click and drag to move around your diagrams
 - **Touch Gestures** - Pinch to zoom and drag to pan on mobile devices
-- **Control Buttons** - Quick access to zoom in, zoom out, and reset buttons
-- **Scale Indicator** - Real-time display of current zoom level
+- **Compact Controls** - Reveal zoom controls from a small bottom-right control
+- **Scale Indicator** - Display the current zoom level in the compact controls
 - **Fullscreen Mode** - Open diagrams in a modal for better viewing
 
 ## Installation
@@ -39,9 +39,9 @@ Once approved, install directly from Obsidian's community plugins browser.
 
 | Action | Description |
 |--------|-------------|
-| **Zoom** | Hover over a Mermaid diagram and scroll the mouse wheel |
+| **Wheel zoom** | Open the compact controls, enable Wheel, then scroll over the diagram |
 | **Pan** | Click and drag to move the diagram |
-| **Fullscreen** | Click the fullscreen button to open in modal view |
+| **Fullscreen** | Open the compact controls and click the fullscreen button |
 
 ### Touch Controls (Mobile)
 
@@ -50,14 +50,16 @@ Once approved, install directly from Obsidian's community plugins browser.
 | **Zoom** | Pinch with two fingers |
 | **Pan** | Drag with one finger |
 
-### Control Buttons
+### Compact Controls
 
-Located in the bottom-right corner of each diagram:
+Hover, focus, or click the bottom-right control to reveal:
 
-- **`+`** - Zoom in
-- **`-`** - Zoom out
-- **`⟲`** - Reset to fit
-- **`⛶`** - Toggle fullscreen
+- Zoom out
+- Current zoom level
+- Zoom in
+- Fit diagram
+- Fullscreen
+- Wheel zoom toggle
 
 ## Development
 
