@@ -15,9 +15,9 @@ interface ZoomState {
 	// Latest stable SVG dimensions used as the unscaled zoom base.
 	svgOriginalWidth: number;
 	svgOriginalHeight: number;
-	// Whether wheel-zoom is enabled for this diagram (inline view only;
-	// the modal always sets this to true). Default false so the wheel
-	// scrolls the page unless the user opts in via the wheel button.
+	// Whether wheel-zoom is enabled for this diagram. Inline diagrams default
+	// to false so the wheel scrolls the page unless the user opts in; the
+	// fullscreen modal defaults to true and can be toggled from its toolbar.
 	wheelZoomEnabled: boolean;
 }
 
@@ -394,37 +394,6 @@ export default class MermaidZoomPlugin extends Plugin {
 			flex-direction: column;
 		`;
 
-		// Create header with close button
-		const header = document.createElement('div');
-		header.className = 'mermaid-zoom-modal-header';
-		header.style.cssText = `
-			display: flex;
-			justify-content: flex-end;
-			padding: 10px 15px;
-			background: var(--background-secondary);
-			border-bottom: 1px solid var(--background-modifier-border);
-		`;
-
-		// Close button
-		const closeBtn = document.createElement('button');
-		closeBtn.className = 'mermaid-zoom-modal-close';
-		closeBtn.textContent = '✕';
-		closeBtn.style.cssText = `
-			width: 32px;
-			height: 32px;
-			border: none;
-			background: var(--interactive-normal);
-			color: var(--text-normal);
-			border-radius: 4px;
-			cursor: pointer;
-			font-size: 18px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			transition: background 0.2s;
-		`;
-		header.appendChild(closeBtn);
-
 		// Create content area
 		const content = document.createElement('div');
 		content.className = 'mermaid-zoom-modal-content';
@@ -466,17 +435,9 @@ export default class MermaidZoomPlugin extends Plugin {
 		// Create modal controls
 		const controls = document.createElement('div');
 		controls.className = 'mermaid-zoom-modal-controls';
-		controls.style.cssText = `
-			position: absolute;
-			bottom: 20px;
-			right: 20px;
-			display: flex;
-			gap: 5px;
-			background: var(--background-secondary);
-			padding: 8px;
-			border-radius: 8px;
-			box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-		`;
+		controls.setAttribute('aria-label', 'Fullscreen Mermaid zoom controls');
+		const zoomGroup = controls.createDiv('mermaid-zoom-controls-group mermaid-zoom-level-group');
+		const actionGroup = controls.createDiv('mermaid-zoom-controls-group mermaid-zoom-actions-group');
 
 		const modalDimensions = this.measureSvgDimensions(svgClone);
 
@@ -498,43 +459,50 @@ export default class MermaidZoomPlugin extends Plugin {
 		};
 		this.updateSvgDimensions(modalState);
 
+		// Scale indicator
+		const scaleIndicator = zoomGroup.createEl('span', {
+			cls: 'mermaid-zoom-scale'
+		});
+		scaleIndicator.setAttribute('aria-live', 'polite');
+		scaleIndicator.setAttribute('aria-label', 'Current zoom level');
+		modalState.scaleIndicator = scaleIndicator;
+
 		// Add zoom buttons
-		const zoomInBtn = document.createElement('button');
-		zoomInBtn.textContent = '+';
-		this.styleButton(zoomInBtn);
-		zoomInBtn.addEventListener('click', () => this.zoom(modalContentWrapper, modalState, 1.2));
+		const zoomOutBtn = this.createIconButton(zoomGroup, 'minus', 'Zoom out');
+		zoomOutBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.zoom(modalContentWrapper, modalState, 0.8);
+		});
 
-		const zoomOutBtn = document.createElement('button');
-		zoomOutBtn.textContent = '-';
-		this.styleButton(zoomOutBtn);
-		zoomOutBtn.addEventListener('click', () => this.zoom(modalContentWrapper, modalState, 0.8));
+		const zoomInBtn = this.createIconButton(zoomGroup, 'plus', 'Zoom in');
+		zoomInBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.zoom(modalContentWrapper, modalState, 1.2);
+		});
 
-		const resetBtn = document.createElement('button');
-		resetBtn.textContent = '⟲';
-		this.styleButton(resetBtn);
-		resetBtn.addEventListener('click', () => {
+		const resetBtn = this.createIconButton(actionGroup, 'rotate-ccw', 'Fit diagram');
+		resetBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
 			this.fitToContainerModal(modalZoomContainer, modalContentWrapper, modalState);
 		});
 
-		// Scale indicator
-		const scaleIndicator = document.createElement('span');
-		scaleIndicator.style.cssText = `
-			padding: 4px 8px;
-			font-size: 12px;
-			font-family: var(--font-ui-medium);
-			color: var(--text-muted);
-			min-width: 45px;
-			text-align: center;
-		`;
-		modalState.scaleIndicator = scaleIndicator;
+		const wheelZoomBtn = this.createIconButton(actionGroup, 'mouse', 'Disable wheel zoom', 'mermaid-zoom-btn mermaid-wheel-zoom-btn');
+		const updateModalWheelZoomButton = () => {
+			wheelZoomBtn.toggleClass('is-active', modalState.wheelZoomEnabled);
+			wheelZoomBtn.setAttribute('aria-pressed', modalState.wheelZoomEnabled ? 'true' : 'false');
+			wheelZoomBtn.setAttribute('aria-label', modalState.wheelZoomEnabled ? 'Disable wheel zoom' : 'Enable wheel zoom');
+			setTooltip(wheelZoomBtn, modalState.wheelZoomEnabled ? 'Disable wheel zoom' : 'Enable wheel zoom', { placement: 'top', delay: 300 });
+		};
+		updateModalWheelZoomButton();
+		wheelZoomBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			modalState.wheelZoomEnabled = !modalState.wheelZoomEnabled;
+			updateModalWheelZoomButton();
+		});
 
-		controls.appendChild(zoomInBtn);
-		controls.appendChild(zoomOutBtn);
-		controls.appendChild(resetBtn);
-		controls.appendChild(scaleIndicator);
+		const exitFullscreenBtn = this.createIconButton(actionGroup, 'minimize', 'Exit fullscreen', 'mermaid-zoom-btn mermaid-fullscreen-btn');
 		content.appendChild(controls);
 
-		modal.appendChild(header);
 		modal.appendChild(content);
 
 		// 注册模态框交互，收集清理函数以便关闭时移除
@@ -562,7 +530,10 @@ export default class MermaidZoomPlugin extends Plugin {
 		document.addEventListener('keydown', handleKeydown);
 
 		// 关闭按钮点击
-		closeBtn.addEventListener('click', closeModal);
+		exitFullscreenBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			closeModal();
+		});
 
 		// 将模态框添加到文档
 		document.body.appendChild(modal);

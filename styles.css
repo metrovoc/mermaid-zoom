@@ -170,6 +170,51 @@
 	text-align: center;
 }
 
+.mermaid-zoom-modal-controls {
+	position: absolute;
+	right: 20px;
+	bottom: 20px;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	max-width: calc(100% - 40px);
+	padding: 5px;
+	overflow-x: auto;
+	white-space: nowrap;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.mermaid-zoom-modal-controls .mermaid-zoom-btn {
+	width: 28px !important;
+	height: 28px !important;
+	min-width: 28px !important;
+	padding: 0 !important;
+	background: transparent !important;
+	border-radius: 6px !important;
+	line-height: 1 !important;
+}
+
+.mermaid-zoom-modal-controls .mermaid-zoom-btn:hover,
+.mermaid-zoom-modal-controls .mermaid-zoom-btn:focus-visible,
+.mermaid-zoom-modal-controls .mermaid-zoom-btn.is-active {
+	background: var(--background-modifier-hover) !important;
+}
+
+.mermaid-zoom-modal-controls .mermaid-zoom-btn.is-active {
+	color: var(--text-accent);
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border-hover);
+}
+
+.mermaid-zoom-modal-controls .mermaid-zoom-btn svg {
+	width: 15px !important;
+	height: 15px !important;
+	stroke-width: 2 !important;
+}
+
 /* Resizing cursor states */
 body.mermaid-zoom-resizing-nwse {
 	cursor: nwse-resize !important;
@@ -191,19 +236,9 @@ body.mermaid-zoom-resizing-ew {
 	user-select: none !important;
 }
 
-/* Modal close button hover */
-.mermaid-zoom-modal-close:hover {
-	background: var(--interactive-hover) !important;
-}
-
 /* Zoom button hover */
 .mermaid-zoom-btn:hover {
 	background: var(--interactive-hover) !important;
-}
-
-/* Fullscreen button padding */
-.mermaid-fullscreen-btn {
-	padding: 6px !important;
 }
 
 /* Resizing state */
