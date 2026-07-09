@@ -28,6 +28,10 @@
 
 /* Container cursor states */
 .mermaid-zoom-content {
+	cursor: default;
+}
+
+.mermaid-zoom-content.is-drag-pan-enabled {
 	cursor: grab;
 }
 

@@ -19,6 +19,9 @@ interface ZoomState {
 	// to false so the wheel scrolls the page unless the user opts in; the
 	// fullscreen modal defaults to true and can be toggled from its toolbar.
 	wheelZoomEnabled: boolean;
+	// Whether left-button mouse drag pans the diagram. Off by default so
+	// normal mouse interactions are not captured until the user opts in.
+	dragPanEnabled: boolean;
 }
 
 interface SvgDimensions {
@@ -317,7 +320,8 @@ export default class MermaidZoomPlugin extends Plugin {
 			container: container,
 			svgOriginalWidth: svgOriginalWidth,
 			svgOriginalHeight: svgOriginalHeight,
-			wheelZoomEnabled: false
+			wheelZoomEnabled: false,
+			dragPanEnabled: false
 		};
 		this.zoomStates.set(contentWrapper, state);
 		this.updateSvgDimensions(state);
@@ -455,7 +459,8 @@ export default class MermaidZoomPlugin extends Plugin {
 			container: modalZoomContainer,
 			svgOriginalWidth: modalDimensions?.width || state.svgOriginalWidth,
 			svgOriginalHeight: modalDimensions?.height || state.svgOriginalHeight,
-			wheelZoomEnabled: true
+			wheelZoomEnabled: true,
+			dragPanEnabled: false
 		};
 		this.updateSvgDimensions(modalState);
 
@@ -484,6 +489,25 @@ export default class MermaidZoomPlugin extends Plugin {
 		resetBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
 			this.fitToContainerModal(modalZoomContainer, modalContentWrapper, modalState);
+		});
+
+		const dragPanBtn = this.createIconButton(actionGroup, 'move', 'Enable drag pan', 'mermaid-zoom-btn mermaid-drag-pan-btn');
+		const updateModalDragPanButton = () => {
+			modalContentWrapper.toggleClass('is-drag-pan-enabled', modalState.dragPanEnabled);
+			dragPanBtn.toggleClass('is-active', modalState.dragPanEnabled);
+			dragPanBtn.setAttribute('aria-pressed', modalState.dragPanEnabled ? 'true' : 'false');
+			dragPanBtn.setAttribute('aria-label', modalState.dragPanEnabled ? 'Disable drag pan' : 'Enable drag pan');
+			setTooltip(dragPanBtn, modalState.dragPanEnabled ? 'Disable drag pan' : 'Enable drag pan', { placement: 'top', delay: 300 });
+		};
+		updateModalDragPanButton();
+		dragPanBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			modalState.dragPanEnabled = !modalState.dragPanEnabled;
+			if (!modalState.dragPanEnabled) {
+				modalState.isDragging = false;
+				modalContentWrapper.removeClass('dragging');
+			}
+			updateModalDragPanButton();
 		});
 
 		const wheelZoomBtn = this.createIconButton(actionGroup, 'mouse', 'Disable wheel zoom', 'mermaid-zoom-btn mermaid-wheel-zoom-btn');
@@ -692,6 +716,25 @@ export default class MermaidZoomPlugin extends Plugin {
 		resetBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
 			this.resetZoom(contentWrapper, state);
+		});
+
+		const dragPanBtn = this.createIconButton(actionGroup, 'move', 'Enable drag pan', 'mermaid-zoom-btn mermaid-drag-pan-btn');
+		const updateDragPanButton = () => {
+			contentWrapper.toggleClass('is-drag-pan-enabled', state.dragPanEnabled);
+			dragPanBtn.toggleClass('is-active', state.dragPanEnabled);
+			dragPanBtn.setAttr('aria-pressed', state.dragPanEnabled ? 'true' : 'false');
+			dragPanBtn.setAttr('aria-label', state.dragPanEnabled ? 'Disable drag pan' : 'Enable drag pan');
+			setTooltip(dragPanBtn, state.dragPanEnabled ? 'Disable drag pan' : 'Enable drag pan', { placement: 'top', delay: 300 });
+		};
+		updateDragPanButton();
+		dragPanBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			state.dragPanEnabled = !state.dragPanEnabled;
+			if (!state.dragPanEnabled) {
+				state.isDragging = false;
+				contentWrapper.removeClass('dragging');
+			}
+			updateDragPanButton();
 		});
 
 		// Wheel-zoom button (off by default). Toggling it flips
@@ -929,7 +972,7 @@ export default class MermaidZoomPlugin extends Plugin {
 		contentWrapper.classList.add('mermaid-zoom-content');
 
 		container.addEventListener('mousedown', (e) => {
-			if (e.button === 0) { // 左键按下
+			if (e.button === 0 && state.dragPanEnabled) { // 左键按下
 				state.isDragging = true;
 				state.startX = e.clientX - state.translateX;
 				state.startY = e.clientY - state.translateY;
