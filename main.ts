@@ -1,4 +1,4 @@
-import { Plugin, ToggleComponent, setIcon, setTooltip } from 'obsidian';
+import { Plugin, setIcon, setTooltip } from 'obsidian';
 
 interface ZoomState {
 	scale: number;
@@ -17,7 +17,7 @@ interface ZoomState {
 	svgOriginalHeight: number;
 	// Whether wheel-zoom is enabled for this diagram (inline view only;
 	// the modal always sets this to true). Default false so the wheel
-	// scrolls the page unless the user opts in via the toggle button.
+	// scrolls the page unless the user opts in via the wheel button.
 	wheelZoomEnabled: boolean;
 }
 
@@ -657,13 +657,6 @@ export default class MermaidZoomPlugin extends Plugin {
 		};
 		document.addEventListener('mousedown', onDocumentMouseDown);
 
-		// Zoom out button
-		const zoomOutBtn = this.createIconButton(zoomGroup, 'minus', 'Zoom out');
-		zoomOutBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.zoom(contentWrapper, state, 0.8);
-		});
-
 		// Scale indicator
 		const scaleIndicator = zoomGroup.createEl('span', {
 			cls: 'mermaid-zoom-scale'
@@ -672,6 +665,13 @@ export default class MermaidZoomPlugin extends Plugin {
 		scaleIndicator.setAttr('aria-label', 'Current zoom level');
 		state.scaleIndicator = scaleIndicator;
 		this.updateTransform(contentWrapper, state);
+
+		// Zoom out button
+		const zoomOutBtn = this.createIconButton(zoomGroup, 'minus', 'Zoom out');
+		zoomOutBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.zoom(contentWrapper, state, 0.8);
+		});
 
 		// Zoom in button
 		const zoomInBtn = this.createIconButton(zoomGroup, 'plus', 'Zoom in');
@@ -687,27 +687,22 @@ export default class MermaidZoomPlugin extends Plugin {
 			this.resetZoom(contentWrapper, state);
 		});
 
-		// Wheel-zoom switch (off by default). Toggling it flips
+		// Wheel-zoom button (off by default). Toggling it flips
 		// state.wheelZoomEnabled, which the wheel handler in addWheelZoom is
 		// gated on — so when off the wheel scrolls the page normally.
-		const wheelZoomToggle = actionGroup.createDiv('mermaid-wheel-zoom-toggle');
-		wheelZoomToggle.setAttr('aria-label', 'Wheel zoom');
-		setTooltip(wheelZoomToggle, 'Wheel zoom', { placement: 'top', delay: 300 });
-
-		const wheelZoomIcon = wheelZoomToggle.createSpan('mermaid-wheel-zoom-icon');
-		setIcon(wheelZoomIcon, 'mouse');
-
-		new ToggleComponent(wheelZoomToggle)
-			.setValue(state.wheelZoomEnabled)
-			.onChange((value) => {
-				state.wheelZoomEnabled = value;
-			});
-
-		// Stop pointer/click events on the switch from bubbling into the
-		// container, where they would otherwise start a drag-pan.
-		const stopSwitchEvent = (e: Event) => e.stopPropagation();
-		wheelZoomToggle.addEventListener('mousedown', stopSwitchEvent);
-		wheelZoomToggle.addEventListener('click', stopSwitchEvent);
+		const wheelZoomBtn = this.createIconButton(actionGroup, 'mouse', 'Enable wheel zoom', 'mermaid-zoom-btn mermaid-wheel-zoom-btn');
+		const updateWheelZoomButton = () => {
+			wheelZoomBtn.toggleClass('is-active', state.wheelZoomEnabled);
+			wheelZoomBtn.setAttr('aria-pressed', state.wheelZoomEnabled ? 'true' : 'false');
+			wheelZoomBtn.setAttr('aria-label', state.wheelZoomEnabled ? 'Disable wheel zoom' : 'Enable wheel zoom');
+			setTooltip(wheelZoomBtn, state.wheelZoomEnabled ? 'Disable wheel zoom' : 'Enable wheel zoom', { placement: 'top', delay: 300 });
+		};
+		updateWheelZoomButton();
+		wheelZoomBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			state.wheelZoomEnabled = !state.wheelZoomEnabled;
+			updateWheelZoomButton();
+		});
 
 		// Fullscreen toggle button
 		const fullscreenBtn = this.createIconButton(actionGroup, 'maximize', 'Open fullscreen', 'mermaid-zoom-btn mermaid-fullscreen-btn');

@@ -49,6 +49,7 @@
 }
 
 .mermaid-zoom-controls-panel {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -90,8 +91,18 @@
 		transform 160ms ease;
 }
 
-.mermaid-zoom-controls-group,
-.mermaid-wheel-zoom-toggle {
+.mermaid-zoom-controls:hover .mermaid-zoom-controls-panel::after,
+.mermaid-zoom-controls:focus-within .mermaid-zoom-controls-panel::after,
+.mermaid-zoom-controls.is-expanded .mermaid-zoom-controls-panel::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	right: -8px;
+	width: 8px;
+	height: 100%;
+}
+
+.mermaid-zoom-controls-group {
 	display: flex;
 	align-items: center;
 }
@@ -136,13 +147,16 @@
 
 .mermaid-zoom-controls .mermaid-zoom-btn:hover,
 .mermaid-zoom-controls .mermaid-zoom-btn:focus-visible,
-.mermaid-wheel-zoom-toggle:hover,
-.mermaid-wheel-zoom-toggle:focus-within {
+.mermaid-zoom-controls .mermaid-zoom-btn.is-active {
 	background: var(--background-modifier-hover) !important;
 }
 
-.mermaid-zoom-controls .mermaid-zoom-btn svg,
-.mermaid-wheel-zoom-icon svg {
+.mermaid-zoom-controls .mermaid-zoom-btn.is-active {
+	color: var(--text-accent);
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border-hover);
+}
+
+.mermaid-zoom-controls .mermaid-zoom-btn svg {
 	width: 15px !important;
 	height: 15px !important;
 	stroke-width: 2 !important;
@@ -164,40 +178,6 @@
 	font-variant-numeric: tabular-nums;
 	color: var(--text-muted);
 	text-align: center;
-}
-
-.mermaid-wheel-zoom-toggle {
-	height: 28px;
-	gap: 5px;
-	padding: 0 4px 0 6px;
-	border-radius: 6px;
-	color: var(--text-muted);
-}
-
-.mermaid-wheel-zoom-icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 16px;
-	height: 16px;
-}
-
-.mermaid-wheel-zoom-toggle .checkbox-container {
-	width: 32px !important;
-	height: 18px !important;
-	min-width: 32px !important;
-	border-radius: 999px !important;
-}
-
-.mermaid-wheel-zoom-toggle .checkbox-container:after {
-	top: 2px !important;
-	left: 2px !important;
-	width: 14px !important;
-	height: 14px !important;
-}
-
-.mermaid-wheel-zoom-toggle .checkbox-container.is-enabled:after {
-	transform: translateX(14px) !important;
 }
 
 /* Resizing cursor states */

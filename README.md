@@ -54,11 +54,11 @@ Once approved, install directly from Obsidian's community plugins browser.
 
 Hover, focus, or click the bottom-right control to reveal:
 
-- Zoom out
 - Current zoom level
+- Zoom out
 - Zoom in
 - Fit diagram
-- Wheel zoom toggle
+- Wheel zoom button
 - Fullscreen
 
 ## Development
