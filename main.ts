@@ -12,13 +12,19 @@ interface ZoomState {
 	scaleIndicator?: HTMLElement;
 	svg: SVGSVGElement;
 	container: HTMLElement;
-	// Original SVG dimensions (saved once)
+	// Latest stable SVG dimensions used as the unscaled zoom base.
 	svgOriginalWidth: number;
 	svgOriginalHeight: number;
 	// Whether wheel-zoom is enabled for this diagram (inline view only;
 	// the modal always sets this to true). Default false so the wheel
 	// scrolls the page unless the user opts in via the toggle button.
 	wheelZoomEnabled: boolean;
+}
+
+interface SvgDimensions {
+	width: number;
+	height: number;
+	source: 'viewBox' | 'bbox' | 'rect';
 }
 
 export default class MermaidZoomPlugin extends Plugin {
@@ -62,24 +68,42 @@ export default class MermaidZoomPlugin extends Plugin {
 	private setupResizeObserver() {
 		this.resizeObserver = new ResizeObserver((entries) => {
 			for (const entry of entries) {
-				const container = entry.target as HTMLElement;
+				const target = entry.target;
+				const contentWrapper = this.getContentWrapperFromResizeTarget(target);
+				if (!contentWrapper) continue;
+
+				const state = this.zoomStates.get(contentWrapper);
+				if (!state) continue;
+
 				// 容器已从 DOM 中移除时，停止观察并清理状态
-				if (!document.contains(container)) {
-					this.resizeObserver?.unobserve(container);
-					const contentWrapper = container.querySelector('.mermaid-zoom-content') as HTMLElement;
-					if (contentWrapper) {
-						this.zoomStates.delete(contentWrapper);
-					}
+				if (!document.contains(state.container)) {
+					this.resizeObserver?.unobserve(state.container);
+					this.resizeObserver?.unobserve(state.svg);
+					this.zoomStates.delete(contentWrapper);
 					continue;
 				}
-				const contentWrapper = container.querySelector('.mermaid-zoom-content') as HTMLElement;
-				if (!contentWrapper) continue;
-				const state = this.zoomStates.get(contentWrapper);
-				if (state) {
-					this.fitToContainer(container, contentWrapper, state.svg, state);
-				}
+
+				this.fitToContainer(state.container, contentWrapper, state);
 			}
 		});
+	}
+
+	private getContentWrapperFromResizeTarget(target: Element): HTMLElement | null {
+		if (target instanceof SVGSVGElement) {
+			return target.closest('.mermaid-zoom-content') as HTMLElement | null;
+		}
+
+		if (target instanceof HTMLElement) {
+			if (target.hasClass('mermaid-zoom-container')) {
+				return target.querySelector('.mermaid-zoom-content') as HTMLElement | null;
+			}
+
+			if (target.hasClass('mermaid-zoom-content')) {
+				return target;
+			}
+		}
+
+		return null;
 	}
 
 	private setupMutationObserver() {
@@ -105,6 +129,10 @@ export default class MermaidZoomPlugin extends Plugin {
 		// Obsidian structure: <div class="mermaid"><svg id="mermaid-xxx">...</svg></div>
 		const mermaidSvgs: SVGSVGElement[] = [];
 
+		if (element instanceof SVGSVGElement && this.isMermaidSvg(element)) {
+			mermaidSvgs.push(element);
+		}
+
 		if (element instanceof HTMLElement) {
 			// Find SVGs inside .mermaid containers or SVGs with mermaid id
 			const svgs = Array.from(element.querySelectorAll('.mermaid svg, svg[id^="mermaid-"]'));
@@ -125,11 +153,91 @@ export default class MermaidZoomPlugin extends Plugin {
 		}
 	}
 
+	private isMermaidSvg(svg: SVGSVGElement): boolean {
+		return svg.id.startsWith('mermaid-') || svg.closest('.mermaid') !== null;
+	}
+
 	private hasZoomContainer(svg: SVGSVGElement): boolean {
 		// Check if SVG or its .mermaid parent is already inside a zoom container
 		const mermaidContainer = svg.closest('.mermaid');
 		const parent = mermaidContainer?.parentElement || svg.parentElement;
 		return parent?.hasClass('mermaid-zoom-content') ?? false;
+	}
+
+	private updateSvgDimensions(state: ZoomState) {
+		const dimensions = this.measureSvgDimensions(state.svg, state.scale);
+		if (!dimensions) return;
+
+		state.svgOriginalWidth = dimensions.width;
+		state.svgOriginalHeight = dimensions.height;
+		this.syncSvgViewportSize(state.svg, dimensions);
+	}
+
+	private measureSvgDimensions(svg: SVGSVGElement, currentScale = 1): SvgDimensions | null {
+		const viewBoxDimensions = this.measureViewBox(svg);
+		if (viewBoxDimensions) return viewBoxDimensions;
+
+		try {
+			const bbox = svg.getBBox();
+			if (bbox.width > 0 && bbox.height > 0) {
+				return {
+					width: bbox.width,
+					height: bbox.height,
+					source: 'bbox'
+				};
+			}
+		} catch {
+			// getBBox can fail while an SVG is detached or display:none.
+		}
+
+		const rect = svg.getBoundingClientRect();
+		if (rect.width > 0 && rect.height > 0) {
+			const scale = currentScale > 0 ? currentScale : 1;
+			return {
+				width: rect.width / scale,
+				height: rect.height / scale,
+				source: 'rect'
+			};
+		}
+
+		return null;
+	}
+
+	private measureViewBox(svg: SVGSVGElement): SvgDimensions | null {
+		const viewBox = svg.viewBox.baseVal;
+		if (viewBox.width > 0 && viewBox.height > 0) {
+			return {
+				width: viewBox.width,
+				height: viewBox.height,
+				source: 'viewBox'
+			};
+		}
+
+		const viewBoxAttribute = svg.getAttribute('viewBox');
+		if (!viewBoxAttribute) return null;
+
+		const values = viewBoxAttribute
+			.trim()
+			.split(/[\s,]+/)
+			.map((value) => Number(value));
+
+		if (values.length === 4 && values[2] > 0 && values[3] > 0) {
+			return {
+				width: values[2],
+				height: values[3],
+				source: 'viewBox'
+			};
+		}
+
+		return null;
+	}
+
+	private syncSvgViewportSize(svg: SVGSVGElement, dimensions: SvgDimensions) {
+		if (dimensions.source !== 'viewBox') return;
+
+		svg.style.width = `${dimensions.width}px`;
+		svg.style.height = `${dimensions.height}px`;
+		svg.style.maxWidth = 'none';
 	}
 
 	private processAllMermaidDiagrams() {
@@ -153,9 +261,9 @@ export default class MermaidZoomPlugin extends Plugin {
 
 		if (!targetParent) return;
 
-		// Get SVG dimensions for initial container sizing
-		const initialSvgRect = svg.getBoundingClientRect();
-		const initialSvgHeight = initialSvgRect.height || 200;
+		// Get stable SVG dimensions for initial container sizing.
+		const initialDimensions = this.measureSvgDimensions(svg);
+		const initialSvgHeight = initialDimensions?.height || 200;
 
 		// Container height: based on SVG aspect ratio, capped reasonably
 		const parentWidth = targetParent.clientWidth || 600;
@@ -191,10 +299,9 @@ export default class MermaidZoomPlugin extends Plugin {
 		targetParent.insertBefore(container, targetElement);
 		contentWrapper.appendChild(targetElement);
 
-		// Get SVG original dimensions before any scaling
-		const svgRect = svg.getBoundingClientRect();
-		const svgOriginalWidth = svgRect.width || svg.clientWidth || 300;
-		const svgOriginalHeight = svgRect.height || svg.clientHeight || 200;
+		const svgDimensions = this.measureSvgDimensions(svg) || initialDimensions;
+		const svgOriginalWidth = svgDimensions?.width || 300;
+		const svgOriginalHeight = svgDimensions?.height || 200;
 
 		// Initialize zoom state
 		const state: ZoomState = {
@@ -213,6 +320,7 @@ export default class MermaidZoomPlugin extends Plugin {
 			wheelZoomEnabled: false
 		};
 		this.zoomStates.set(contentWrapper, state);
+		this.updateSvgDimensions(state);
 
 		// 注册控件和交互，插件卸载时自动清理
 		this.register(this.createControls(container, contentWrapper, state));
@@ -221,15 +329,20 @@ export default class MermaidZoomPlugin extends Plugin {
 		this.register(this.addTouchGestures(container, contentWrapper, state));
 
 		// Fit SVG to container initially
-		this.fitToContainer(container, contentWrapper, svg, state);
+		this.fitToContainer(container, contentWrapper, state);
+		requestAnimationFrame(() => {
+			this.fitToContainer(container, contentWrapper, state);
+		});
 
-		// Re-fit on container resize
+		// Re-fit on container or SVG resize
 		this.resizeObserver?.observe(container);
+		this.resizeObserver?.observe(svg);
 	}
 
-	private fitToContainer(container: HTMLElement, contentWrapper: HTMLElement, svg: SVGSVGElement, state: ZoomState) {
+	private fitToContainer(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
 		// 零值保护：容器或 SVG 尺寸为零时跳过，避免产生无效缩放
 		if (container.clientWidth <= 0 || container.clientHeight <= 0) return;
+		this.updateSvgDimensions(state);
 		if (state.svgOriginalWidth <= 0 || state.svgOriginalHeight <= 0) return;
 
 		// 从实际渲染样式中获取内边距，避免硬编码 1em=16px 的假设偏差
@@ -365,6 +478,8 @@ export default class MermaidZoomPlugin extends Plugin {
 			box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 		`;
 
+		const modalDimensions = this.measureSvgDimensions(svgClone);
+
 		// Modal zoom state
 		const modalState: ZoomState = {
 			scale: 1,
@@ -377,10 +492,11 @@ export default class MermaidZoomPlugin extends Plugin {
 			translateY: 0,
 			svg: svgClone,
 			container: modalZoomContainer,
-			svgOriginalWidth: state.svgOriginalWidth,
-			svgOriginalHeight: state.svgOriginalHeight,
+			svgOriginalWidth: modalDimensions?.width || state.svgOriginalWidth,
+			svgOriginalHeight: modalDimensions?.height || state.svgOriginalHeight,
 			wheelZoomEnabled: true
 		};
+		this.updateSvgDimensions(modalState);
 
 		// Add zoom buttons
 		const zoomInBtn = document.createElement('button');
@@ -460,6 +576,7 @@ export default class MermaidZoomPlugin extends Plugin {
 	private fitToContainerModal(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
 		// 零值保护：模态框容器或 SVG 尺寸为零时跳过
 		if (container.clientWidth <= 0 || container.clientHeight <= 0) return;
+		this.updateSvgDimensions(state);
 		if (state.svgOriginalWidth <= 0 || state.svgOriginalHeight <= 0) return;
 
 		// 计算可用空间
@@ -930,7 +1047,7 @@ export default class MermaidZoomPlugin extends Plugin {
 
 	private resetZoom(contentWrapper: HTMLElement, state: ZoomState) {
 		// Fit to container instead of just resetting to 100%
-		this.fitToContainer(state.container, contentWrapper, state.svg, state);
+		this.fitToContainer(state.container, contentWrapper, state);
 	}
 
 	private updateTransform(contentWrapper: HTMLElement, state: ZoomState) {
