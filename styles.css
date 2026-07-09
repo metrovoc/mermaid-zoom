@@ -250,3 +250,62 @@ body.mermaid-zoom-resizing {
 	cursor: inherit !important;
 	user-select: none !important;
 }
+
+@media print {
+	.mermaid-zoom-controls,
+	.mermaid-zoom-modal-controls,
+	[class^="mermaid-resize-"],
+	[class*=" mermaid-resize-"] {
+		display: none !important;
+	}
+
+	.mermaid-zoom-container {
+		height: auto !important;
+		min-height: 0 !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		overflow: visible !important;
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
+
+	.mermaid-zoom-content,
+	.mermaid-zoom-modal-wrapper {
+		position: static !important;
+		width: auto !important;
+		transform: none !important;
+		transition: none !important;
+		cursor: auto !important;
+	}
+
+	.mermaid-zoom-modal,
+	.mermaid-zoom-modal-content,
+	.mermaid-zoom-modal-zoom-container {
+		position: static !important;
+		display: block !important;
+		width: auto !important;
+		height: auto !important;
+		overflow: visible !important;
+		background: transparent !important;
+	}
+
+	.mermaid-zoom-content .mermaid,
+	.mermaid-zoom-container svg,
+	.mermaid-zoom-modal-wrapper svg {
+		max-width: 100% !important;
+	}
+
+	.mermaid-zoom-container svg,
+	.mermaid-zoom-modal-wrapper svg {
+		width: auto !important;
+		height: auto !important;
+		max-height: none !important;
+		overflow: visible !important;
+		filter: none !important;
+	}
+
+	.mermaid-zoom-content svg *,
+	.mermaid-zoom-modal-wrapper svg * {
+		vector-effect: none !important;
+	}
+}

@@ -15,6 +15,7 @@ An Obsidian plugin that adds zoom and pan functionality to Mermaid diagrams.
 - **Compact Controls** - Reveal zoom controls from a small bottom-right control
 - **Scale Indicator** - Display the current zoom level in the compact controls
 - **Fullscreen Mode** - Open diagrams in a modal for better viewing
+- **Print-Friendly Output** - Print Mermaid diagrams without zoom controls or viewport clipping
 
 ## Installation
 
