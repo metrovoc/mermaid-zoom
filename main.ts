@@ -332,15 +332,41 @@ export default class MermaidZoomPlugin extends Plugin {
 		this.register(this.addDragPan(container, contentWrapper, state));
 		this.register(this.addTouchGestures(container, contentWrapper, state));
 
-		// Fit SVG to container initially
-		this.fitToContainer(container, contentWrapper, state);
-		requestAnimationFrame(() => {
-			this.fitToContainer(container, contentWrapper, state);
-		});
+		// Fit after Mermaid and Obsidian layout have had time to settle.
+		this.register(this.scheduleInitialFit(container, contentWrapper, state));
 
 		// Re-fit on container or SVG resize
 		this.resizeObserver?.observe(container);
 		this.resizeObserver?.observe(svg);
+	}
+
+	private scheduleInitialFit(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
+		const fit = () => {
+			if (!document.contains(container)) return;
+			this.fitToContainer(container, contentWrapper, state);
+		};
+
+		let frameOne = 0;
+		let frameTwo = 0;
+		const timeouts: number[] = [];
+
+		fit();
+		frameOne = window.requestAnimationFrame(() => {
+			fit();
+			frameTwo = window.requestAnimationFrame(fit);
+		});
+
+		for (const delay of [120, 360]) {
+			timeouts.push(window.setTimeout(fit, delay));
+		}
+
+		return () => {
+			window.cancelAnimationFrame(frameOne);
+			window.cancelAnimationFrame(frameTwo);
+			for (const timeout of timeouts) {
+				window.clearTimeout(timeout);
+			}
+		};
 	}
 
 	private fitToContainer(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
