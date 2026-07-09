@@ -622,15 +622,47 @@ export default class MermaidZoomPlugin extends Plugin {
 		const zoomGroup = panel.createDiv('mermaid-zoom-controls-group mermaid-zoom-level-group');
 		const actionGroup = panel.createDiv('mermaid-zoom-controls-group mermaid-zoom-actions-group');
 
+		let hoverCollapseTimeout: number | null = null;
+		const syncExpandedAttr = () => {
+			const expanded = controls.hasClass('is-expanded') || controls.hasClass('is-hovering');
+			triggerBtn.setAttr('aria-expanded', expanded ? 'true' : 'false');
+		};
+
+		const clearHoverCollapse = () => {
+			if (hoverCollapseTimeout === null) return;
+			window.clearTimeout(hoverCollapseTimeout);
+			hoverCollapseTimeout = null;
+		};
+
+		const showHoverControls = () => {
+			clearHoverCollapse();
+			controls.addClass('is-hovering');
+			syncExpandedAttr();
+		};
+
+		const scheduleHoverCollapse = () => {
+			clearHoverCollapse();
+			hoverCollapseTimeout = window.setTimeout(() => {
+				controls.removeClass('is-hovering');
+				hoverCollapseTimeout = null;
+				syncExpandedAttr();
+			}, 300);
+		};
+
 		const collapseControls = () => {
+			clearHoverCollapse();
 			controls.removeClass('is-expanded');
-			triggerBtn.setAttr('aria-expanded', 'false');
+			controls.removeClass('is-hovering');
+			syncExpandedAttr();
 		};
 
 		const toggleControls = () => {
 			const expanded = !controls.hasClass('is-expanded');
 			controls.toggleClass('is-expanded', expanded);
-			triggerBtn.setAttr('aria-expanded', expanded ? 'true' : 'false');
+			if (!expanded) {
+				controls.removeClass('is-hovering');
+			}
+			syncExpandedAttr();
 		};
 
 		const stopControlsEvent = (e: Event) => e.stopPropagation();
@@ -642,6 +674,10 @@ export default class MermaidZoomPlugin extends Plugin {
 			e.stopPropagation();
 			toggleControls();
 		});
+		triggerBtn.addEventListener('mouseenter', showHoverControls);
+		triggerBtn.addEventListener('mouseleave', scheduleHoverCollapse);
+		panel.addEventListener('mouseenter', showHoverControls);
+		panel.addEventListener('mouseleave', scheduleHoverCollapse);
 
 		controls.addEventListener('keydown', (e) => {
 			if (e.key === 'Escape') {
@@ -714,10 +750,15 @@ export default class MermaidZoomPlugin extends Plugin {
 		// 添加调整大小手柄，并返回清理函数
 		const cleanupResizeHandles = this.addResizeHandles(container, contentWrapper, state);
 		return () => {
+			clearHoverCollapse();
 			document.removeEventListener('mousedown', onDocumentMouseDown);
 			for (const eventName of ['mousedown', 'click', 'touchstart', 'wheel']) {
 				controls.removeEventListener(eventName, stopControlsEvent);
 			}
+			triggerBtn.removeEventListener('mouseenter', showHoverControls);
+			triggerBtn.removeEventListener('mouseleave', scheduleHoverCollapse);
+			panel.removeEventListener('mouseenter', showHoverControls);
+			panel.removeEventListener('mouseleave', scheduleHoverCollapse);
 			cleanupResizeHandles();
 		};
 	}

@@ -76,6 +76,7 @@
 
 .mermaid-zoom-controls:hover .mermaid-zoom-controls-panel,
 .mermaid-zoom-controls:focus-within .mermaid-zoom-controls-panel,
+.mermaid-zoom-controls.is-hovering .mermaid-zoom-controls-panel,
 .mermaid-zoom-controls.is-expanded .mermaid-zoom-controls-panel {
 	max-width: min(360px, calc(100% - 40px));
 	visibility: visible;
@@ -89,17 +90,6 @@
 		opacity 120ms ease,
 		padding 160ms ease,
 		transform 160ms ease;
-}
-
-.mermaid-zoom-controls:hover .mermaid-zoom-controls-panel::after,
-.mermaid-zoom-controls:focus-within .mermaid-zoom-controls-panel::after,
-.mermaid-zoom-controls.is-expanded .mermaid-zoom-controls-panel::after {
-	content: "";
-	position: absolute;
-	top: 0;
-	right: -8px;
-	width: 8px;
-	height: 100%;
 }
 
 .mermaid-zoom-controls-group {
