@@ -332,7 +332,8 @@ export default class MermaidZoomPlugin extends Plugin {
 		this.register(this.addDragPan(container, contentWrapper, state));
 		this.register(this.addTouchGestures(container, contentWrapper, state));
 
-		// Fit after Mermaid and Obsidian layout have had time to settle.
+		// Fit once the diagram is visible. Offscreen Mermaid blocks often do
+		// not have stable layout metrics until Obsidian scrolls them into view.
 		this.register(this.scheduleInitialFit(container, contentWrapper, state));
 
 		// Re-fit on container or SVG resize
@@ -341,39 +342,59 @@ export default class MermaidZoomPlugin extends Plugin {
 	}
 
 	private scheduleInitialFit(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): () => void {
-		const fit = () => {
-			if (!document.contains(container)) return;
-			this.fitToContainer(container, contentWrapper, state);
-		};
-
+		let disposed = false;
 		let frameOne = 0;
 		let frameTwo = 0;
-		const timeouts: number[] = [];
+		let intersectionObserver: IntersectionObserver | null = null;
 
-		fit();
-		frameOne = window.requestAnimationFrame(() => {
+		const clearScheduledFits = () => {
+			window.cancelAnimationFrame(frameOne);
+			window.cancelAnimationFrame(frameTwo);
+		};
+
+		const fit = (): boolean => {
+			if (disposed || !document.contains(container)) return false;
+			return this.fitToContainer(container, contentWrapper, state);
+		};
+
+		const scheduleVisibleFit = () => {
+			clearScheduledFits();
+
 			fit();
-			frameTwo = window.requestAnimationFrame(fit);
-		});
+			frameOne = window.requestAnimationFrame(() => {
+				fit();
+				frameTwo = window.requestAnimationFrame(fit);
+			});
+		};
 
-		for (const delay of [120, 360]) {
-			timeouts.push(window.setTimeout(fit, delay));
+		if ('IntersectionObserver' in window) {
+			intersectionObserver = new IntersectionObserver((entries) => {
+				for (const entry of entries) {
+					if (entry.target === container && entry.isIntersecting) {
+						scheduleVisibleFit();
+						intersectionObserver?.disconnect();
+						intersectionObserver = null;
+						break;
+					}
+				}
+			}, { rootMargin: '200px 0px' });
+			intersectionObserver.observe(container);
+		} else {
+			scheduleVisibleFit();
 		}
 
 		return () => {
-			window.cancelAnimationFrame(frameOne);
-			window.cancelAnimationFrame(frameTwo);
-			for (const timeout of timeouts) {
-				window.clearTimeout(timeout);
-			}
+			disposed = true;
+			intersectionObserver?.disconnect();
+			clearScheduledFits();
 		};
 	}
 
-	private fitToContainer(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState) {
+	private fitToContainer(container: HTMLElement, contentWrapper: HTMLElement, state: ZoomState): boolean {
 		// 零值保护：容器或 SVG 尺寸为零时跳过，避免产生无效缩放
-		if (container.clientWidth <= 0 || container.clientHeight <= 0) return;
+		if (container.clientWidth <= 0 || container.clientHeight <= 0) return false;
 		this.updateSvgDimensions(state);
-		if (state.svgOriginalWidth <= 0 || state.svgOriginalHeight <= 0) return;
+		if (state.svgOriginalWidth <= 0 || state.svgOriginalHeight <= 0) return false;
 
 		// 从实际渲染样式中获取内边距，避免硬编码 1em=16px 的假设偏差
 		const computedStyle = getComputedStyle(container);
@@ -406,6 +427,7 @@ export default class MermaidZoomPlugin extends Plugin {
 		state.translateX = centerX;
 		state.translateY = Math.max(0, centerY);
 		this.updateTransform(contentWrapper, state);
+		return true;
 	}
 
 	private openFullscreenModal(state: ZoomState) {
