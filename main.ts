@@ -619,6 +619,8 @@ export default class MermaidZoomPlugin extends Plugin {
 		triggerBtn.setAttr('aria-expanded', 'false');
 
 		const panel = controls.createDiv('mermaid-zoom-controls-panel');
+		const zoomGroup = panel.createDiv('mermaid-zoom-controls-group mermaid-zoom-level-group');
+		const actionGroup = panel.createDiv('mermaid-zoom-controls-group mermaid-zoom-actions-group');
 
 		const collapseControls = () => {
 			controls.removeClass('is-expanded');
@@ -656,70 +658,44 @@ export default class MermaidZoomPlugin extends Plugin {
 		document.addEventListener('mousedown', onDocumentMouseDown);
 
 		// Zoom out button
-		const zoomOutBtn = this.createIconButton(panel, 'minus', 'Zoom out');
+		const zoomOutBtn = this.createIconButton(zoomGroup, 'minus', 'Zoom out');
 		zoomOutBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
 			this.zoom(contentWrapper, state, 0.8);
 		});
 
 		// Scale indicator
-		const scaleIndicator = panel.createEl('span', {
+		const scaleIndicator = zoomGroup.createEl('span', {
 			cls: 'mermaid-zoom-scale'
 		});
-		scaleIndicator.style.cssText = `
-			padding: 4px 8px;
-			font-size: 12px;
-			font-family: var(--font-ui-medium);
-			color: var(--text-muted);
-			min-width: 45px;
-			text-align: center;
-		`;
 		scaleIndicator.setAttr('aria-live', 'polite');
+		scaleIndicator.setAttr('aria-label', 'Current zoom level');
 		state.scaleIndicator = scaleIndicator;
 		this.updateTransform(contentWrapper, state);
 
 		// Zoom in button
-		const zoomInBtn = this.createIconButton(panel, 'plus', 'Zoom in');
+		const zoomInBtn = this.createIconButton(zoomGroup, 'plus', 'Zoom in');
 		zoomInBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
 			this.zoom(contentWrapper, state, 1.2);
 		});
 
 		// Reset button
-		const resetBtn = this.createIconButton(panel, 'rotate-ccw', 'Fit diagram');
+		const resetBtn = this.createIconButton(actionGroup, 'rotate-ccw', 'Fit diagram');
 		resetBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
 			this.resetZoom(contentWrapper, state);
 		});
 
-		// Fullscreen toggle button
-		const fullscreenBtn = this.createIconButton(panel, 'maximize-2', 'Open fullscreen', 'mermaid-zoom-btn mermaid-fullscreen-btn');
-		fullscreenBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.openFullscreenModal(state);
-		});
-
 		// Wheel-zoom switch (off by default). Toggling it flips
 		// state.wheelZoomEnabled, which the wheel handler in addWheelZoom is
 		// gated on — so when off the wheel scrolls the page normally.
-		const wheelZoomToggle = panel.createDiv('mermaid-wheel-zoom-toggle');
-		wheelZoomToggle.style.cssText = `
-			display: flex;
-			align-items: center;
-			gap: 6px;
-			padding: 0 6px 0 2px;
-		`;
+		const wheelZoomToggle = actionGroup.createDiv('mermaid-wheel-zoom-toggle');
+		wheelZoomToggle.setAttr('aria-label', 'Wheel zoom');
+		setTooltip(wheelZoomToggle, 'Wheel zoom', { placement: 'top', delay: 300 });
 
-		const wheelZoomLabel = wheelZoomToggle.createEl('span', {
-			text: 'Wheel',
-			cls: 'mermaid-wheel-zoom-label'
-		});
-		wheelZoomLabel.style.cssText = `
-			font-size: 12px;
-			font-family: var(--font-ui-medium);
-			color: var(--text-muted);
-			white-space: nowrap;
-		`;
+		const wheelZoomIcon = wheelZoomToggle.createSpan('mermaid-wheel-zoom-icon');
+		setIcon(wheelZoomIcon, 'mouse');
 
 		new ToggleComponent(wheelZoomToggle)
 			.setValue(state.wheelZoomEnabled)
@@ -732,6 +708,13 @@ export default class MermaidZoomPlugin extends Plugin {
 		const stopSwitchEvent = (e: Event) => e.stopPropagation();
 		wheelZoomToggle.addEventListener('mousedown', stopSwitchEvent);
 		wheelZoomToggle.addEventListener('click', stopSwitchEvent);
+
+		// Fullscreen toggle button
+		const fullscreenBtn = this.createIconButton(actionGroup, 'maximize', 'Open fullscreen', 'mermaid-zoom-btn mermaid-fullscreen-btn');
+		fullscreenBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.openFullscreenModal(state);
+		});
 
 		// 添加调整大小手柄，并返回清理函数
 		const cleanupResizeHandles = this.addResizeHandles(container, contentWrapper, state);

@@ -58,8 +58,8 @@ Hover, focus, or click the bottom-right control to reveal:
 - Current zoom level
 - Zoom in
 - Fit diagram
-- Fullscreen
 - Wheel zoom toggle
+- Fullscreen
 
 ## Development
 
